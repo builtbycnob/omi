@@ -184,8 +184,7 @@ def precache_conversation_audio_endpoint(request: Request, conversation_id: str)
         return {"status": "no_audio", "message": "No audio files in conversation"}
 
     # Start background parallel pre-caching for all audio files using storage_executor
-    def _precache_all_parallel(request: Request):
-        uid = request.state.uid
+    def _precache_all_parallel():
         logger.info(f"Pre-caching all {len(audio_files)} audio files for conversation {conversation_id} (parallel)")
         futures = [storage_executor.submit(_precache_audio_file, uid, conversation_id, af) for af in audio_files]
         for future in futures:
@@ -281,8 +280,7 @@ def get_audio_signed_urls_endpoint(request: Request, conversation_id: str):
     # Cache remaining files in background
     if uncached_files:
 
-        def _cache_uncached_parallel(request: Request):
-            uid = request.state.uid
+        def _cache_uncached_parallel():
             futures = [storage_executor.submit(_precache_audio_file, uid, conversation_id, af) for af in uncached_files]
             for future in futures:
                 try:
@@ -1307,8 +1305,7 @@ def _process_segments_background(
         segment_lock = threading.Lock()
         total_segments = len(segmented_paths)
 
-        def _process_one_segment(request: Request, path):
-            uid = request.state.uid
+        def _process_one_segment(path):
             process_segment(
                 path,
                 uid,
