@@ -7,7 +7,7 @@ from typing import List, Optional
 from urllib.parse import urlparse
 from pydantic import BaseModel as PydanticBaseModel, ValidationError
 from ulid import ULID
-from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Header, Query
+from fastapi import Request, APIRouter, Depends, Form, UploadFile, File, HTTPException, Header, Query
 from fastapi.responses import HTMLResponse
 
 from utils.apps import fetch_app_chat_tools_from_manifest
@@ -208,13 +208,15 @@ def _get_categories():
 
 
 @router.get('/v1/apps', tags=['v1'], response_model=List[AppBaseModel])
-def get_apps(uid: str = Depends(auth.get_current_user_uid), include_reviews: bool = True):
+def get_apps(request: Request, include_reviews: bool = True):
+    uid = request.state.uid
     apps = get_available_apps(uid, include_reviews=include_reviews)
     return [normalize_app_numeric_fields(app.to_reduced_dict()) for app in apps]
 
 
 @router.get('/v1/apps/enabled', tags=['v1'])
-def get_user_enabled_apps(uid: str = Depends(auth.get_current_user_uid)):
+def get_user_enabled_apps(request: Request):
+    uid = request.state.uid
     """Returns the list of app IDs the user has enabled/installed."""
     return get_enabled_apps(uid)
 
@@ -289,10 +291,7 @@ def get_apps_v2(
 
 
 @router.get('/v2/apps/capability/{capability_id}/grouped', tags=['v2'])
-def get_capability_apps_grouped_by_category(
-    capability_id: str,
-    include_reviews: bool = Query(default=True),
-):
+def get_capability_apps_grouped_by_category(capability_id: str, include_reviews: bool = Query(default=True)):
     """Get all apps for a specific capability, grouped by master category.
 
     Returns apps grouped into master categories like:
@@ -326,8 +325,7 @@ def get_capability_apps_grouped_by_category(
         'capability': {
             'id': capability_id,
             'title': next(
-                (c['title'] for c in capabilities if c['id'] == capability_id),
-                capability_id.title().replace('_', ' '),
+                (c['title'] for c in capabilities if c['id'] == capability_id), capability_id.title().replace('_', ' ')
             ),
         },
         'meta': {
@@ -352,7 +350,6 @@ def search_apps(
     installed_apps: bool | None = Query(default=None, description='Filter to show only installed/enabled apps'),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=20, ge=1, le=100),
-    uid: str = Depends(auth.get_current_user_uid),
 ):
     """Search and filter apps with pagination.
 
@@ -452,7 +449,7 @@ def get_approved_apps(include_reviews: bool = False):
 
 
 @router.get('/v1/apps/popular', tags=['v1'], response_model=List[AppBaseModel])
-def get_popular_apps_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+def get_popular_apps_endpoint():
     apps = get_popular_apps()
     # Always exclude persona type apps
     filtered_apps = [app for app in apps if not app.is_a_persona()]
@@ -460,7 +457,8 @@ def get_popular_apps_endpoint(uid: str = Depends(auth.get_current_user_uid)):
 
 
 @router.post('/v1/apps', tags=['v1'])
-def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)):
+def create_app(request: Request, app_data: str = Form(...), file: UploadFile = File(...)):
+    uid = request.state.uid
     data = json.loads(app_data)
     data['approved'] = False
     data['status'] = 'under-review'
@@ -540,9 +538,8 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
 
 
 @router.post('/v1/personas', tags=['v1'])
-async def create_persona(
-    persona_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)
-):
+async def create_persona(request: Request, persona_data: str = Form(...), file: UploadFile = File(...)):
+    uid = request.state.uid
     data = json.loads(persona_data)
     data['approved'] = False
     data['status'] = 'under-review'
@@ -585,11 +582,9 @@ async def create_persona(
 
 @router.patch('/v1/personas/{persona_id}', tags=['v1'])
 async def update_persona(
-    persona_id: str,
-    persona_data: str = Form(...),
-    file: UploadFile = File(None),
-    uid=Depends(auth.get_current_user_uid),
+    request: Request, persona_id: str, persona_data: str = Form(...), file: UploadFile = File(None)
 ):
+    uid = request.state.uid
     data = json.loads(persona_data)
     persona = get_available_app_by_id(persona_id, uid)
     if not persona:
@@ -635,7 +630,8 @@ async def update_persona(
 
 
 @router.get('/v1/personas', tags=['v1'])
-def get_persona_details(uid: str = Depends(auth.get_current_user_uid)):
+def get_persona_details(request: Request):
+    uid = request.state.uid
     app = get_persona_by_uid(uid)
     # print(app)
     app = App(**app) if app else None
@@ -651,7 +647,8 @@ def get_persona_details(uid: str = Depends(auth.get_current_user_uid)):
 
 
 @router.post('/v1/user/persona', tags=['v1'])
-async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_uid)):
+async def get_or_create_user_persona(request: Request):
+    uid = request.state.uid
     """Get or create a user persona.
 
     If the user already has a persona, return it.
@@ -706,9 +703,8 @@ async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_ui
 
 
 @router.patch('/v1/apps/{app_id}', tags=['v1'])
-def update_app(
-    app_id: str, app_data: str = Form(...), file: UploadFile = File(None), uid=Depends(auth.get_current_user_uid)
-):
+def update_app(request: Request, app_id: str, app_data: str = Form(...), file: UploadFile = File(None)):
+    uid = request.state.uid
     data = json.loads(app_data)
     app = get_available_app_by_id(app_id, uid)
     if not app:
@@ -763,7 +759,8 @@ def update_app(
 
 
 @router.post('/v1/apps/{app_id}/refresh-manifest', tags=['v1'])
-def refresh_app_manifest(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def refresh_app_manifest(request: Request, app_id: str):
+    uid = request.state.uid
     """
     Refresh chat tools manifest for an app.
 
@@ -823,7 +820,8 @@ def refresh_app_manifest(app_id: str, uid: str = Depends(auth.get_current_user_u
 
 
 @router.delete('/v1/apps/{app_id}', tags=['v1'])
-def delete_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def delete_app(request: Request, app_id: str):
+    uid = request.state.uid
     app = get_available_app_by_id(app_id, uid)
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
@@ -837,7 +835,8 @@ def delete_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
 
 
 @router.get('/v1/apps/{app_id}', tags=['v1'])
-def get_app_details(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def get_app_details(request: Request, app_id: str):
+    uid = request.state.uid
     app = get_available_app_by_id_with_reviews(app_id, uid)
     app = App(**app) if app else None
     if not app:
@@ -885,7 +884,8 @@ def get_app_categories():
 
 
 @router.post('/v1/apps/review', tags=['v1'])
-def review_app(app_id: str, data: dict, uid: str = Depends(auth.get_current_user_uid)):
+def review_app(request: Request, app_id: str, data: dict):
+    uid = request.state.uid
     if 'score' not in data:
         raise HTTPException(status_code=422, detail='Score is required')
 
@@ -913,18 +913,15 @@ def review_app(app_id: str, data: dict, uid: str = Depends(auth.get_current_user
     # Send notification to app owner
     if review_body := data.get('review', ''):
         send_new_app_review_notification(
-            app_owner_uid=app.uid,
-            reviewer_uid=uid,
-            app_id=app_id,
-            app_name=app.name,
-            review_body=review_body,
+            app_owner_uid=app.uid, reviewer_uid=uid, app_id=app_id, app_name=app.name, review_body=review_body
         )
 
     return {'status': 'ok'}
 
 
 @router.patch('/v1/apps/{app_id}/review', tags=['v1'])
-def update_app_review(app_id: str, data: dict, uid: str = Depends(auth.get_current_user_uid)):
+def update_app_review(request: Request, app_id: str, data: dict):
+    uid = request.state.uid
     if 'score' not in data:
         raise HTTPException(status_code=422, detail='Score is required')
 
@@ -955,18 +952,15 @@ def update_app_review(app_id: str, data: dict, uid: str = Depends(auth.get_curre
     # Send notification to app owner
     if review_body := data.get('review', ''):
         send_new_app_review_notification(
-            app_owner_uid=app.uid,
-            reviewer_uid=uid,
-            app_id=app_id,
-            app_name=app.name,
-            review_body=review_body,
+            app_owner_uid=app.uid, reviewer_uid=uid, app_id=app_id, app_name=app.name, review_body=review_body
         )
 
     return {'status': 'ok'}
 
 
 @router.patch('/v1/apps/{app_id}/review/reply', tags=['v1'])
-def reply_to_review(app_id: str, data: dict, uid: str = Depends(auth.get_current_user_uid)):
+def reply_to_review(request: Request, app_id: str, data: dict):
+    uid = request.state.uid
     app = get_available_app_by_id(app_id, uid)
     app = App(**app) if app else None
     if not app:
@@ -991,13 +985,7 @@ def reply_to_review(app_id: str, data: dict, uid: str = Depends(auth.get_current
     set_app_review(app_id, reviewer_uid, review)
 
     # Send notification to reviewer
-    send_app_review_reply_notification(
-        reviewer_uid,
-        app.uid,
-        data['response'],
-        app_id,
-        app.name,
-    )
+    send_app_review_reply_notification(reviewer_uid, app.uid, data['response'], app_id, app.name)
 
     return {'status': 'ok'}
 
@@ -1010,7 +998,8 @@ def app_reviews(app_id: str):
 
 
 @router.patch('/v1/apps/{app_id}/change-visibility', tags=['v1'])
-def change_app_visibility(app_id: str, private: bool, uid: str = Depends(auth.get_current_user_uid)):
+def change_app_visibility(request: Request, app_id: str, private: bool):
+    uid = request.state.uid
     app = get_available_app_by_id(app_id, uid)
     app = App(**app) if app else None
     if not app:
@@ -1100,7 +1089,8 @@ def get_payment_plans_v1():
 
 
 @router.get('/v1/app/plans', tags=['v1'])
-def get_payment_plans(uid: str = Depends(auth.get_current_user_uid)):
+def get_payment_plans(request: Request):
+    uid = request.state.uid
     if not uid or len(uid) == 0 or not is_permit_payment_plan_get(uid):
         return []
     return [
@@ -1109,7 +1099,8 @@ def get_payment_plans(uid: str = Depends(auth.get_current_user_uid)):
 
 
 @router.post('/v1/app/generate-description', tags=['v1'])
-def generate_description_endpoint(data: dict, uid: str = Depends(auth.get_current_user_uid)):
+def generate_description_endpoint(request: Request, data: dict):
+    uid = request.state.uid
     if data['name'] == '':
         raise HTTPException(status_code=422, detail='App Name is required')
     if data['description'] == '':
@@ -1122,7 +1113,8 @@ def generate_description_endpoint(data: dict, uid: str = Depends(auth.get_curren
 
 
 @router.post('/v1/app/generate-description-emoji', tags=['v1'])
-def generate_description_and_emoji_endpoint(data: dict, uid: str = Depends(auth.get_current_user_uid)):
+def generate_description_and_emoji_endpoint(request: Request, data: dict):
+    uid = request.state.uid
     """
     Generate an app description and representative emoji.
     Used by the quick template creator feature.
@@ -1144,10 +1136,11 @@ def generate_description_and_emoji_endpoint(data: dict, uid: str = Depends(auth.
 # ******************************************************
 
 
-@router.get('/v1/app/generate-prompts', tags=['v1'])
-async def generate_sample_prompts_endpoint(
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "apps:generate_prompts")),
-):
+@router.get(
+    '/v1/app/generate-prompts', tags=['v1'], dependencies=[Depends(auth.with_rate_limit("apps:generate_prompts"))]
+)
+async def generate_sample_prompts_endpoint(request: Request):
+    uid = request.state.uid
     """
     Generate sample app prompts for the AI app generator.
     Uses a fast model to generate creative suggestions.
@@ -1216,7 +1209,8 @@ Be creative, fun, and varied. No generic ideas."""
 
 
 @router.post('/v1/app/generate', tags=['v1'])
-async def generate_app_endpoint(data: dict, uid: str = Depends(auth.get_current_user_uid)):
+async def generate_app_endpoint(request: Request, data: dict):
+    uid = request.state.uid
     """
     Generate an app configuration from a natural language prompt.
     This is an experimental feature that uses AI to create app configurations.
@@ -1255,7 +1249,8 @@ async def generate_app_endpoint(data: dict, uid: str = Depends(auth.get_current_
 
 
 @router.post('/v1/app/generate-icon', tags=['v1'])
-async def generate_app_icon_endpoint(data: dict, uid: str = Depends(auth.get_current_user_uid)):
+async def generate_app_icon_endpoint(request: Request, data: dict):
+    uid = request.state.uid
     """
     Generate an app icon using AI (DALL-E).
     Returns the icon as a base64 encoded PNG image.
@@ -1293,7 +1288,8 @@ async def generate_app_icon_endpoint(data: dict, uid: str = Depends(auth.get_cur
 
 
 @router.get('/v1/personas/twitter/profile', tags=['v1'])
-async def get_twitter_profile_data(handle: str, uid: str = Depends(auth.get_current_user_uid)):
+async def get_twitter_profile_data(request: Request, handle: str):
+    uid = request.state.uid
     if handle.startswith('@'):
         handle = handle[1:]
     profile = await get_twitter_profile(handle)
@@ -1326,10 +1322,9 @@ async def get_twitter_profile_data(handle: str, uid: str = Depends(auth.get_curr
 
 
 @router.get('/v1/personas/twitter/verify-ownership', tags=['v1'])
-async def verify_twitter_ownership_tweet(
-    username: str, handle: str, uid: str = Depends(auth.get_current_user_uid), persona_id: str | None = None
-):
+async def verify_twitter_ownership_tweet(request: Request, username: str, handle: str, persona_id: str | None = None):
     # Get user info to check auth provider
+    uid = request.state.uid
     user = get_user_from_uid(uid)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -1359,7 +1354,8 @@ async def verify_twitter_ownership_tweet(
 
 
 @router.get('/v1/personas/twitter/initial-message', tags=['v1'])
-async def get_twitter_initial_message(username: str, uid: str = Depends(auth.get_current_user_uid)):
+async def get_twitter_initial_message(request: Request, username: str):
+    uid = request.state.uid
     persona = get_persona_by_username_db(username)
     if persona:
         with track_usage(uid, Features.PERSONA):
@@ -1369,8 +1365,9 @@ async def get_twitter_initial_message(username: str, uid: str = Depends(auth.get
 
 
 @router.post('/v1/apps/migrate-owner', tags=['v1'])
-async def migrate_app_owner(old_id, uid: str = Depends(auth.get_current_user_uid)):
+async def migrate_app_owner(request: Request, old_id):
     # Migrate app ownership in the database
+    uid = request.state.uid
     migrate_app_owner_id_db(uid, old_id)
 
     # Start async tasks to migrate memories and update persona connected accounts
@@ -1431,7 +1428,8 @@ def _serialize_chat_tools_for_firestore(tools) -> list:
 
 
 @router.post('/v1/apps/mcp', tags=['v1'])
-async def add_mcp_server(data: McpServerRequest, uid: str = Depends(auth.get_current_user_uid)):
+async def add_mcp_server(request: Request, data: McpServerRequest):
+    uid = request.state.uid
     """Add a remote MCP server as a private app with chat tools.
 
     1. Extracts domain from URL and fetches logo via Brandfetch / logo.dev
@@ -1477,8 +1475,7 @@ async def add_mcp_server(data: McpServerRequest, uid: str = Depends(auth.get_cur
                 raise HTTPException(status_code=502, detail=f'OAuth client registration failed: {str(e)}')
         else:
             raise HTTPException(
-                status_code=422,
-                detail='MCP server requires OAuth but does not support dynamic client registration',
+                status_code=422, detail='MCP server requires OAuth but does not support dynamic client registration'
             )
 
         state = generate_state_token(app_id, uid)
@@ -1575,7 +1572,8 @@ async def add_mcp_server(data: McpServerRequest, uid: str = Depends(auth.get_cur
 
 
 @router.get('/v1/apps/mcp/callback', tags=['v1'])
-async def mcp_oauth_callback(code: str, state: str):
+async def mcp_oauth_callback(request: Request, code: str, state: str):
+    uid = request.state.uid
     """OAuth callback for MCP server authorization.
 
     Exchanges the authorization code for tokens, discovers tools, updates the app.
@@ -1665,7 +1663,8 @@ async def mcp_oauth_callback(code: str, state: str):
 
 
 @router.post('/v1/apps/{app_id}/mcp/refresh', tags=['v1'])
-async def refresh_mcp_tools(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+async def refresh_mcp_tools(request: Request, app_id: str):
+    uid = request.state.uid
     """Re-discover tools from an MCP server and update the app."""
     app_data = get_app_by_id_db(app_id)
     if not app_data:
@@ -1730,7 +1729,8 @@ async def refresh_mcp_tools(app_id: str, uid: str = Depends(auth.get_current_use
 
 
 @router.post('/v1/apps/enable')
-async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+async def enable_app_endpoint(request: Request, app_id: str):
+    uid = request.state.uid
     app = get_available_app_by_id(app_id, uid)
     app = App(**app) if app else None
     if not app:
@@ -1756,9 +1756,10 @@ async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_u
 
 
 @router.post('/v1/apps/disable')
-def disable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def disable_app_endpoint(request: Request, app_id: str):
     # Allow users to always disable apps they have installed, even if the app
     # was made private after installation (see issue #4886).
+    uid = request.state.uid
     if is_app_enabled(uid, app_id):
         disable_app(uid, app_id)
         app = get_available_app_by_id(app_id, uid)
@@ -1777,7 +1778,8 @@ def disable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_u
 
 
 @router.post('/v1/apps/tester', tags=['v1'])
-def add_new_tester(data: dict, secret_key: str = Header(...)):
+def add_new_tester(request: Request, data: dict, secret_key: str = Header(...)):
+    uid = request.state.uid
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if not data.get('uid'):
@@ -1790,7 +1792,8 @@ def add_new_tester(data: dict, secret_key: str = Header(...)):
 
 
 @router.post('/v1/apps/tester/access', tags=['v1'])
-def add_app_access_tester(data: dict, secret_key: str = Header(...)):
+def add_app_access_tester(request: Request, data: dict, secret_key: str = Header(...)):
+    uid = request.state.uid
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if not data.get('uid'):
@@ -1802,7 +1805,8 @@ def add_app_access_tester(data: dict, secret_key: str = Header(...)):
 
 
 @router.delete('/v1/apps/tester/access', tags=['v1'])
-def remove_app_access_tester(data: dict, secret_key: str = Header(...)):
+def remove_app_access_tester(request: Request, data: dict, secret_key: str = Header(...)):
+    uid = request.state.uid
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if not data.get('uid'):
@@ -1814,7 +1818,8 @@ def remove_app_access_tester(data: dict, secret_key: str = Header(...)):
 
 
 @router.get('/v1/apps/tester/check', tags=['v1'])
-def check_is_tester(uid: str = Depends(auth.get_current_user_uid)):
+def check_is_tester(request: Request):
+    uid = request.state.uid
     if is_tester(uid):
         return {'is_tester': True}
     return {'is_tester': False}
@@ -1847,9 +1852,7 @@ def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
     delete_app_cache_by_id(app_id)
     app = get_available_app_by_id(app_id, uid)
     send_notification(
-        uid,
-        'App Approved 🎉',
-        f'Your app {app["name"]} has been approved and is now available for everyone to use 🥳',
+        uid, 'App Approved 🎉', f'Your app {app["name"]} has been approved and is now available for everyone to use 🥳'
     )
     return {'status': 'ok'}
 
@@ -1873,7 +1876,8 @@ def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
 
 @router.delete('/v1/personas/{persona_id}', tags=['v1'])
 @router.post('/v1/app/thumbnails', tags=['v1'])
-async def upload_app_thumbnail_endpoint(file: UploadFile = File(...), uid: str = Depends(auth.get_current_user_uid)):
+async def upload_app_thumbnail_endpoint(request: Request, file: UploadFile = File(...)):
+    uid = request.state.uid
     """Upload a thumbnail image for an app.
 
     Args:
@@ -1927,7 +1931,8 @@ def get_personas(persona_id: str, secret_key: str = Header(...)):
 
 
 @router.post('/v1/apps/{app_id}/keys', tags=['v1'])
-def create_api_key_for_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def create_api_key_for_app(request: Request, app_id: str):
+    uid = request.state.uid
     app = get_available_app_by_id(app_id, uid)
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
@@ -1945,7 +1950,8 @@ def create_api_key_for_app(app_id: str, uid: str = Depends(auth.get_current_user
 
 
 @router.get('/v1/apps/{app_id}/keys', tags=['v1'])
-def list_api_keys(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def list_api_keys(request: Request, app_id: str):
+    uid = request.state.uid
     app = get_available_app_by_id(app_id, uid)
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
@@ -1958,7 +1964,8 @@ def list_api_keys(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
 
 
 @router.delete('/v1/apps/{app_id}/keys/{key_id}', tags=['v1'])
-def delete_api_key(app_id: str, key_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def delete_api_key(request: Request, app_id: str, key_id: str):
+    uid = request.state.uid
     app = get_available_app_by_id(app_id, uid)
     if not app:
         raise HTTPException(status_code=404, detail='App not found')

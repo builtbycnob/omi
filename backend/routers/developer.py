@@ -18,11 +18,7 @@ from database.vector_db import upsert_memory_vectors_batch
 
 from models.memories import MemoryCategory, Memory, MemoryDB
 from models.conversation import CreateConversation, ExternalIntegrationCreateConversation
-from models.conversation_enums import (
-    CategoryEnum,
-    ConversationSource,
-    ExternalIntegrationConversationSource,
-)
+from models.conversation_enums import CategoryEnum, ConversationSource, ExternalIntegrationConversationSource
 from models.geolocation import Geolocation
 from utils.conversations.render import populate_speaker_names, populate_folder_names
 from models.transcript_segment import TranscriptSegment
@@ -157,10 +153,7 @@ class BatchMemoriesResponse(BaseModel):
 
 @router.get("/v1/dev/user/memories", tags=["developer"], response_model=List[CleanerMemory])
 def get_memories(
-    uid: str = Depends(get_uid_with_memories_read),
-    limit: int = 25,
-    offset: int = 0,
-    categories: Optional[str] = None,
+    uid: str = Depends(get_uid_with_memories_read), limit: int = 25, offset: int = 0, categories: Optional[str] = None
 ):
     category_list = []
     if categories:
@@ -178,8 +171,7 @@ def get_memories(
 
 @router.post("/v1/dev/user/memories", response_model=MemoryResponse, tags=["developer"])
 def create_memory(
-    request: CreateMemoryRequest,
-    uid: str = Depends(with_rate_limit(get_uid_with_memories_write, "dev:memories")),
+    request: CreateMemoryRequest, uid: str = Depends(with_rate_limit(get_uid_with_memories_write, "dev:memories"))
 ):
     """
     Create a new memory for the authenticated user.
@@ -197,10 +189,7 @@ def create_memory(
 
     # Create Memory object
     memory = Memory(
-        content=request.content.strip(),
-        category=category,
-        visibility=request.visibility,
-        tags=request.tags,
+        content=request.content.strip(), category=category, visibility=request.visibility, tags=request.tags
     )
 
     # Convert to MemoryDB object
@@ -255,10 +244,7 @@ def create_memories_batch(
 
         # Create Memory object
         memory = Memory(
-            content=mem_req.content.strip(),
-            category=category,
-            visibility=mem_req.visibility,
-            tags=mem_req.tags,
+            content=mem_req.content.strip(), category=category, visibility=mem_req.visibility, tags=mem_req.tags
         )
 
         # Convert to MemoryDB object
@@ -310,10 +296,7 @@ def create_memories_batch(
 
 
 @router.delete("/v1/dev/user/memories/{memory_id}", tags=["developer"])
-def delete_memory(
-    memory_id: str,
-    uid: str = Depends(get_uid_with_memories_write),
-):
+def delete_memory(memory_id: str, uid: str = Depends(get_uid_with_memories_write)):
     """
     Delete a memory by ID.
 
@@ -330,11 +313,7 @@ def delete_memory(
 
 
 @router.patch("/v1/dev/user/memories/{memory_id}", response_model=CleanerMemory, tags=["developer"])
-def update_memory(
-    memory_id: str,
-    request: UpdateMemoryRequest,
-    uid: str = Depends(get_uid_with_memories_write),
-):
+def update_memory(memory_id: str, request: UpdateMemoryRequest, uid: str = Depends(get_uid_with_memories_write)):
     """
     Update a memory's content, visibility, tags, or category.
 
@@ -453,10 +432,7 @@ def get_action_items(
 
 
 @router.post("/v1/dev/user/action-items", response_model=ActionItemResponse, tags=["developer"])
-def create_action_item(
-    request: CreateActionItemRequest,
-    uid: str = Depends(get_uid_with_action_items_write),
-):
+def create_action_item(request: CreateActionItemRequest, uid: str = Depends(get_uid_with_action_items_write)):
     """
     Create a new action item for the authenticated user.
 
@@ -493,10 +469,7 @@ def create_action_item(
 
 
 @router.post("/v1/dev/user/action-items/batch", response_model=BatchActionItemsResponse, tags=["developer"])
-def create_action_items_batch(
-    request: BatchActionItemsRequest,
-    uid: str = Depends(get_uid_with_action_items_write),
-):
+def create_action_items_batch(request: BatchActionItemsRequest, uid: str = Depends(get_uid_with_action_items_write)):
     """
     Create multiple action items in a batch.
 
@@ -545,10 +518,7 @@ def create_action_items_batch(
 
 
 @router.delete("/v1/dev/user/action-items/{action_item_id}", tags=["developer"])
-def delete_action_item(
-    action_item_id: str,
-    uid: str = Depends(get_uid_with_action_items_write),
-):
+def delete_action_item(action_item_id: str, uid: str = Depends(get_uid_with_action_items_write)):
     """
     Delete an action item by ID.
 
@@ -566,9 +536,7 @@ def delete_action_item(
 
 @router.patch("/v1/dev/user/action-items/{action_item_id}", response_model=ActionItemResponse, tags=["developer"])
 def update_action_item(
-    action_item_id: str,
-    request: UpdateActionItemRequest,
-    uid: str = Depends(get_uid_with_action_items_write),
+    action_item_id: str, request: UpdateActionItemRequest, uid: str = Depends(get_uid_with_action_items_write)
 ):
     """
     Update an action item.
@@ -609,10 +577,7 @@ def update_action_item(
     if request.due_at is not None:
         description = request.description.strip() if request.description else action_item.get('description', '')
         send_action_item_data_message(
-            user_id=uid,
-            action_item_id=action_item_id,
-            description=description,
-            due_at=request.due_at.isoformat(),
+            user_id=uid, action_item_id=action_item_id, description=description, due_at=request.due_at.isoformat()
         )
 
     return action_items_db.get_action_item(uid, action_item_id)
@@ -857,9 +822,7 @@ def create_conversation(
 
 @router.get("/v1/dev/user/conversations/{conversation_id}", response_model=Conversation, tags=["developer"])
 def get_conversation_endpoint(
-    conversation_id: str,
-    include_transcript: bool = False,
-    uid: str = Depends(get_uid_with_conversations_read),
+    conversation_id: str, include_transcript: bool = False, uid: str = Depends(get_uid_with_conversations_read)
 ):
     """
     Get a single conversation by ID.
@@ -1021,10 +984,7 @@ def create_conversation_from_segments(
 
 
 @router.delete("/v1/dev/user/conversations/{conversation_id}", tags=["developer"])
-def delete_conversation_endpoint(
-    conversation_id: str,
-    uid: str = Depends(get_uid_with_conversations_write),
-):
+def delete_conversation_endpoint(conversation_id: str, uid: str = Depends(get_uid_with_conversations_write)):
     """
     Delete a conversation by ID.
 
@@ -1044,9 +1004,7 @@ def delete_conversation_endpoint(
 
 @router.patch("/v1/dev/user/conversations/{conversation_id}", response_model=Conversation, tags=["developer"])
 def update_conversation_endpoint(
-    conversation_id: str,
-    request: UpdateConversationRequest,
-    uid: str = Depends(get_uid_with_conversations_write),
+    conversation_id: str, request: UpdateConversationRequest, uid: str = Depends(get_uid_with_conversations_write)
 ):
     """
     Update a conversation's title or discard status.
@@ -1133,11 +1091,7 @@ def _serialize_goal_datetimes(goal: dict) -> dict:
 
 
 @router.get("/v1/dev/user/goals", tags=["developer"], response_model=List[GoalResponse])
-def get_goals(
-    uid: str = Depends(get_uid_with_goals_read),
-    limit: int = 10,
-    include_inactive: bool = False,
-):
+def get_goals(uid: str = Depends(get_uid_with_goals_read), limit: int = 10, include_inactive: bool = False):
     """
     Get user goals.
 
@@ -1153,10 +1107,7 @@ def get_goals(
 
 
 @router.get("/v1/dev/user/goals/{goal_id}", tags=["developer"], response_model=GoalResponse)
-def get_goal(
-    goal_id: str,
-    uid: str = Depends(get_uid_with_goals_read),
-):
+def get_goal(goal_id: str, uid: str = Depends(get_uid_with_goals_read)):
     """
     Get a single goal by ID.
 
@@ -1172,10 +1123,7 @@ def get_goal(
 
 
 @router.post("/v1/dev/user/goals", tags=["developer"], response_model=GoalResponse)
-def create_goal(
-    request: CreateGoalRequest,
-    uid: str = Depends(get_uid_with_goals_write),
-):
+def create_goal(request: CreateGoalRequest, uid: str = Depends(get_uid_with_goals_write)):
     """
     Create a new goal. Supports up to 3 active goals; the oldest is deactivated if at max.
 
@@ -1206,11 +1154,7 @@ def create_goal(
 
 
 @router.patch("/v1/dev/user/goals/{goal_id}", tags=["developer"], response_model=GoalResponse)
-def update_goal(
-    goal_id: str,
-    request: UpdateGoalRequest,
-    uid: str = Depends(get_uid_with_goals_write),
-):
+def update_goal(goal_id: str, request: UpdateGoalRequest, uid: str = Depends(get_uid_with_goals_write)):
     """
     Update a goal.
 
@@ -1260,9 +1204,7 @@ def update_goal_progress(
 
 @router.get("/v1/dev/user/goals/{goal_id}/history", tags=["developer"])
 def get_goal_history(
-    goal_id: str,
-    days: int = Query(default=30, le=365),
-    uid: str = Depends(get_uid_with_goals_read),
+    goal_id: str, days: int = Query(default=30, le=365), uid: str = Depends(get_uid_with_goals_read)
 ) -> List[dict]:
     """
     Get progress history for a goal.
@@ -1280,10 +1222,7 @@ def get_goal_history(
 
 
 @router.delete("/v1/dev/user/goals/{goal_id}", tags=["developer"])
-def delete_goal(
-    goal_id: str,
-    uid: str = Depends(get_uid_with_goals_write),
-):
+def delete_goal(goal_id: str, uid: str = Depends(get_uid_with_goals_write)):
     """
     Delete a goal by ID.
 
